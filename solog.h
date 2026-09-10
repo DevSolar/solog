@@ -7,6 +7,11 @@
  *
  * * Define SOLOG_IMPLEMENTATION in exactly one translation unit before
  *   including this header.
+ * * By setting SOLOG_IMPLEMENTATION to an OR-ed selection of features
+ *   (SOLOG_FEATURE_*) you activate those features at compile time; by
+ *   AND-ing them out of solog_config.features you can deactivate them
+ *   at runtime.
+ *   * SOLOG_FEATURE_LEVEL: Show the level of the message in the output.
  *
  * * Basic functionality: SOLOG( <lvl>, <fmt>, ... )
  *   * <lvl> can be one of TRACE, DEBUG, INFO, WARN, ERR, FAIL
@@ -22,6 +27,7 @@
  *
  * HISTORY:
  *
+ *    2 -- Making level output optional, preparing for extension
  *    1 -- Initial release, basic functionality
  *
  * FUTURE:
@@ -34,7 +40,7 @@
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOLOG_H
-#define SOLOG_H 1
+#define SOLOG_H 2
 
 #include <stdio.h>
 
@@ -54,6 +60,9 @@ typedef enum
     SOLOG_LVL_FAIL
 } solog_level_t;
 
+/* Display the message level in the output */
+#define SOLOG_FEATURE_LEVEL (1<<0)
+
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpadded"
@@ -66,6 +75,7 @@ typedef struct
 {
     FILE * stream;
     solog_level_t level;
+    unsigned features;
 } solog_config_t;
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
@@ -88,9 +98,32 @@ void solog( solog_level_t level, char const * fmt, ... );
 /* ---------------------------------------------------------------------- */
 
 #ifdef SOLOG_IMPLEMENTATION
+#if SOLOG_IMPLEMENTATION + 0 == 0
+/* No features selected; keep ultra-light */
 #undef SOLOG_IMPLEMENTATION
+#define SOLOG_IMPLEMENTATION 0
+#endif
+
+/* Features selected; provide solog_alloca() */
+#if defined(_WIN32)
+#include <malloc.h>
+#define solog_alloca(sz) _malloca(sz)
+#define solog_freea(p)    _freea(p)
+#elif defined(__GNUC__) || defined(__clang__)
+#define solog_alloca(sz) __builtin_alloca(sz)
+#define solog_freea(p)    ((void)(p))
+#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__)
+#include <stdlib.h>
+#define solog_alloca(sz) alloca(sz)
+#define solog_freea(p)    ((void)(p))
+#else
+#include <alloca.h>
+#define solog_alloca(sz) alloca(sz)
+#define solog_freea(p)    ((void)(p))
+#endif
 
 #include <stdarg.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,7 +133,8 @@ extern "C" {
 
 solog_config_t solog_config = {
     NULL,
-    SOLOG_LVL_INFO
+    SOLOG_LVL_INFO,
+    SOLOG_IMPLEMENTATION
 };
 
 #if defined(__GNUC__)
@@ -117,25 +151,50 @@ solog_config_t solog_config = {
 
 void solog( solog_level_t level, char const * fmt, ... )
 {
+#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LEVEL
+/* max. level length + ' | ' */
+#define SOLOG_SZ_LEVEL 8
     static char const * const solog_hdrs[] = {
-        "TRACE | ",
-        "DEBUG | ",
-        " INFO | ",
-        " WARN | ",
-        "  ERR | ",
-        " FAIL | ",
-        "ILLGL | "
+        "TRACE",
+        "DEBUG",
+        " INFO",
+        " WARN",
+        "  ERR",
+        " FAIL",
+        "ILLGL"
     };
+#else
+#define SOLOG_SZ_LEVEL 0
+#endif
 
-    char const * hdr = ( ( level >= SOLOG_LVL_TRACE ) && ( level <= SOLOG_LVL_FAIL ) ) ? solog_hdrs[ level ] : solog_hdrs[ SOLOG_LVL_FAIL + 1 ];
+#define SOLOG_SZ_FMT ( \
+        SOLOG_SZ_LEVEL \
+        + 2 )
+
+    char * fmt_cmpl = (char *)solog_alloca( SOLOG_SZ_FMT + strlen( fmt ) );
+    char * fptr = fmt_cmpl;
+
+#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LEVEL
+    int const lvl = ( ( level >= SOLOG_LVL_TRACE ) && ( level <= SOLOG_LVL_FAIL ) ) ? level : SOLOG_LVL_FAIL + 1;
+#else
+    (void)level;
+#endif
     FILE * stream = ( solog_config.stream == NULL ) ? stderr : solog_config.stream;
-    char fmt_buf[1024];
     va_list ap;
 
+#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LEVEL
+    if ( solog_config.features & SOLOG_FEATURE_LEVEL )
+    {
+        fptr += sprintf( fptr, "%.*s | ", SOLOG_SZ_LEVEL - 3, solog_hdrs[ lvl ] );
+    }
+#endif
+
+    sprintf( fptr, "%s\n", fmt );
+
     va_start( ap, fmt );
-    snprintf( fmt_buf, sizeof( fmt_buf ), "%s%s\n", hdr, fmt );
-    vfprintf( stream, fmt_buf, ap );
+    vfprintf( stream, fmt_cmpl, ap );
     va_end( ap );
+    solog_freea( fmt_cmpl );
 }
 
 #if defined(__GNUC__)

@@ -1,3 +1,4 @@
+/*#define SOLOG_IMPLEMENTATION SOLOG_FEATURE_LEVEL*/
 #define SOLOG_IMPLEMENTATION
 #include "solog.h"
 
