@@ -1,17 +1,19 @@
 /* SoLog
+ *
  * Some Ordinary Logging
  *
  * CC0 1.0 Universal / Public Domain
  *
- * Usage:
+ * USAGE:
+ *
+ * * All translation units except for one just include this header and use
+ *   SOLOG( <level>, <fmt_string>, ... ), printf-style.
+ *   Solog prefixes the user-provided format string with the log line
+ *   header; by default via alloca() and truncating too-long format strings,
+ *   optionally by falling back to malloc().
  *
  * * Define SOLOG_IMPLEMENTATION in exactly one translation unit before
  *   including this header.
- * * By setting SOLOG_IMPLEMENTATION to an OR-ed selection of features
- *   (SOLOG_FEATURE_*) you activate those features at compile time; by
- *   AND-ing them out of solog_config.features you can deactivate them
- *   at runtime.
- *   * SOLOG_FEATURE_LEVEL: Show the level of the message in the output.
  *
  * * Basic functionality: SOLOG( <lvl>, <fmt>, ... )
  *   * <lvl> can be one of TRACE, DEBUG, INFO, WARN, ERR, FAIL
@@ -21,12 +23,31 @@
  *     (default: SOLOG_LVL_INFO)
  *   * output stream can be set by solog_config.stream = ...
  *     (default: stderr)
+ *   * can override macro solog_alloca to define custom memory allocation
  *
  * * SOLOG_H can be used for version-checking; will be incremented in future
  *   versions.
  *
+ * * By setting SOLOG_IMPLEMENTATION to an OR-ed selection of features
+ *   (SOLOG_FEATURE_*), you activate those features at compile time; by
+ *   AND-ing them out of solog_config.features you can deactivate them
+ *   at runtime.
+ *
+ *   These features are available:
+ *
+ *   * SOLOG_FEATURE_LEVEL: Show the level of the message in the output.
+ *   * SOLOG_FEATURE_MALLOC: Use malloc() for long messages (default is
+ *     to truncate the format string after SOLOG_ALLOCA_MAX characters).
+ *     Can override macros solog_malloc and solog_free (on Unix-alike OS)
+ *     or solog_malloca and solog_freea (on Windows) to define custom
+ *     memory allocation.
+ *     Can override SOLOG_ALLOCA_MAX to set the maximum amount of memory
+ *     retrieved from stack before switching to malloc (default 1kB).
+ *   * SOLOG_FEATURE_ALL: Enable all the features above.
+ *
  * HISTORY:
  *
+ *    3 -- Optional use of malloc() for very long messages
  *    2 -- Making level output optional, preparing for extension
  *    1 -- Initial release, basic functionality
  *
@@ -35,12 +56,15 @@
  * * timestamping
  * * scoping (module-local log levels)
  * * ...
+ *
+ * Latest version available at:
+ *   https://github.com/DevSolar/solog/
  */
 
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOLOG_H
-#define SOLOG_H 2
+#define SOLOG_H 3
 
 #include <stdio.h>
 
@@ -48,11 +72,26 @@
 extern "C" {
 #endif
 
-/* COMPILE TIME CONFIGURATION */
-/* See comment at top / Readme.md on usage */
 
+/* LOG LEVELS */
+/* SOLOG_LVL_* automatically prefixed by SOLOG() macro */
+typedef enum
+{
+    SOLOG_LVL_TRACE = 0,
+    SOLOG_LVL_DEBUG,
+    SOLOG_LVL_INFO,
+    SOLOG_LVL_WARN,
+    SOLOG_LVL_ERR,
+    SOLOG_LVL_FAIL
+} solog_level_t;
+
+
+/* COMPILE TIME CONFIGURATION */
 /* Display the message level in the output */
 #define SOLOG_FEATURE_LEVEL (1<<0)
+#define SOLOG_FEATURE_MALLOC (1<<1)
+
+#define SOLOG_FEATURE_ALL ((1<<0) | (1<<1))
 
 
 /* RUNTIME CONFIGURATION */
@@ -77,19 +116,6 @@ typedef struct
 #endif
 
 extern solog_config_t solog_config;
-
-/* LOG LEVELS */
-/* SOLOG_LVL_* automatically prefixed by SOLOG() macro */
-typedef enum
-{
-    SOLOG_LVL_TRACE = 0,
-    SOLOG_LVL_DEBUG,
-    SOLOG_LVL_INFO,
-    SOLOG_LVL_WARN,
-    SOLOG_LVL_ERR,
-    SOLOG_LVL_FAIL
-} solog_level_t;
-
 
 /* SOLOG MACRO */
 /* Feel free to shorten the macro itself to LOG, the rest should remain
@@ -135,6 +161,85 @@ solog_config_t solog_config = {
     SOLOG_LVL_INFO,
     SOLOG_IMPLEMENTATION
 };
+
+#ifndef SOLOG_ALLOCA_MAX
+#define SOLOG_ALLOCA_MAX 1024
+#endif
+
+/* MEMORY ALLOCATION */
+#ifdef _WIN32
+/* Windows provides _malloca(), which falls back to malloc() if the requested
+ * size is too large for alloca().
+ */
+#undef _ALLOCA_S_THRESHOLD
+#define _ALLOCA_S_THRESHOLD SOLOG_ALLOCA_MAX
+#include <malloc.h>
+#ifndef solog_alloca
+#define solog_alloca( sz ) _alloca( sz )
+#endif
+#ifndef solog_malloca
+#define solog_malloca( sz ) _malloca( sz )
+#endif
+#ifndef solog_freea
+#define solog_freea( ptr ) _freea( ptr )
+#endif
+#else
+/* For other platforms, we implement our own version of _malloca(). */
+/* solog_alloca(), solog_malloc(), solog_free() */
+#include <stdlib.h>
+#ifndef solog_malloc
+#define solog_malloc( sz ) malloc( sz )
+#endif
+#ifndef solog_free
+#define solog_free( ptr ) free( ptr )
+#endif
+#ifndef solog_alloca
+#if defined( __GNUC__ ) || defined( __clang__ )
+#define solog_alloca( sz ) __builtin_alloca( sz )
+#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__)
+#define solog_alloca( sz ) alloca( sz )
+#else
+#include <alloca.h>
+#define solog_alloca( sz ) alloca( sz )
+#endif
+#endif
+
+typedef union
+{
+    int canary;
+    /* maxalign_t not available pre-C11 so we make do */
+    long double ld;
+    long long ll;
+    void * ptr;
+    void (*fptr)(void);
+} solog_maxalign_t;
+
+static inline void * solog_add_canary( void * ptr, int canary )
+{
+    solog_maxalign_t * memhdr = (solog_maxalign_t *)ptr;
+    memhdr->canary = canary;
+    return (void *)( ++memhdr );
+}
+
+#define solog_malloca( sz ) \
+    ( ( (size_t)(sz) <= (SOLOG_ALLOCA_MAX - sizeof( solog_maxalign_t )) ) \
+        ? solog_add_canary( solog_alloca( (size_t)(sz) + sizeof( solog_maxalign_t ) ), 0x00 ) \
+        : solog_add_canary( solog_malloc( (size_t)(sz) + sizeof( solog_maxalign_t ) ), 0x01 ) )
+
+static inline void solog_freea( void * ptr )
+{
+    if ( ptr )
+    {
+        solog_maxalign_t * memhdr = (solog_maxalign_t *)ptr;
+        --memhdr;
+
+        if ( memhdr->canary == 0x01 )
+        {
+            solog_free( (void *)memhdr );
+        }
+    }
+}
+#endif
 
 /* Suppressed warnings:
  * -Wformat-nonliteral
@@ -190,7 +295,13 @@ void solog( solog_level_t level, char const * fmt, ... )
 
     /* Step 2: Allocate header memory */
 
-    char * fmt_cmpl = (char *)solog_alloca( SOLOG_SZ_FMT + strlen( fmt ) );
+    size_t fmt_len = SOLOG_SZ_FMT + strlen( fmt );
+#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_MALLOC
+    char * fmt_cmpl = (char *)solog_malloca( ( ! ( solog_config.features & SOLOG_FEATURE_MALLOC ) && ( fmt_len > SOLOG_ALLOCA_MAX ) ) ? SOLOG_ALLOCA_MAX : fmt_len );
+#else
+    char * fmt_cmpl = (char *)solog_alloca( fmt_len > SOLOG_ALLOCA_MAX ? SOLOG_ALLOCA_MAX : fmt_len );
+#endif
+
     char * fptr = fmt_cmpl;
 
     /* Step 3: Range-check the log level */
@@ -217,7 +328,18 @@ void solog( solog_level_t level, char const * fmt, ... )
 
     /* Step 6: Append the user's format string to the header */
 
-    sprintf( fptr, "%s\n", fmt );
+#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_MALLOC
+    if ( solog_config.features & SOLOG_FEATURE_MALLOC )
+    {
+        sprintf( fptr, "%s\n", fmt );
+    }
+    else
+    {
+        sprintf( fptr, "%.*s\n", SOLOG_ALLOCA_MAX - (int)( ( fptr + 2 ) - fmt_cmpl ), fmt );
+    }
+#else
+    sprintf( fptr, "%.*s\n", SOLOG_ALLOCA_MAX - (int)( ( fptr + 2 ) - fmt_cmpl ), fmt );
+#endif
 
     /* Step 7: Print the log message using our header-plus-format-string. */
 
@@ -227,7 +349,9 @@ void solog( solog_level_t level, char const * fmt, ... )
 
     /* Step 8: Clean up. */
 
+#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_MALLOC
     solog_freea( fmt_cmpl );
+#endif
 }
 
 #if defined(__GNUC__)

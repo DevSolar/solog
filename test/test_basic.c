@@ -49,6 +49,24 @@ int main( void )
 
     fclose( f );
 
+    /* 4. Test solog_malloca and solog_freea */
+    solog_freea( NULL );
+
+    /* Small allocation (stack) */
+    char * p_small = (char *)solog_malloca( 64 );
+    assert( p_small != NULL );
+    memset( p_small, 'X', 64 );
+    assert( p_small[ 0 ] == 'X' );
+    solog_freea( p_small );
+
+    /* Large allocation (heap) */
+    char * p_large = (char *)solog_malloca( 2048 );
+    assert( p_large != NULL );
+    memset( p_large, 'Y', 2048 );
+    assert( p_large[ 0 ] == 'Y' );
+    assert( p_large[ 2047 ] == 'Y' );
+    solog_freea( p_large );
+
     char const * const expected =
         "msg info 3\n"
         "msg warn 4\n"

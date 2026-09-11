@@ -28,6 +28,17 @@ int main( void )
 
     SOLOG( WARN, "C++ test warning %d", 42 );
 
+    /* Test solog_malloca / solog_freea in C++ */
+    char * cpp_small = (char *)solog_malloca( 32 );
+    assert( cpp_small != NULL );
+    cpp_small[ 0 ] = 'C';
+    solog_freea( cpp_small );
+
+    char * cpp_large = (char *)solog_malloca( 2048 );
+    assert( cpp_large != NULL );
+    cpp_large[ 0 ] = 'P';
+    solog_freea( cpp_large );
+
     fclose( f );
 
     char const * const expected =
