@@ -48,27 +48,20 @@
 extern "C" {
 #endif
 
-/* Declarations for every translation unit */
-
-typedef enum
-{
-    SOLOG_LVL_TRACE = 0,
-    SOLOG_LVL_DEBUG,
-    SOLOG_LVL_INFO,
-    SOLOG_LVL_WARN,
-    SOLOG_LVL_ERR,
-    SOLOG_LVL_FAIL
-} solog_level_t;
+/* COMPILE TIME CONFIGURATION */
+/* See comment at top / Readme.md on usage */
 
 /* Display the message level in the output */
 #define SOLOG_FEATURE_LEVEL (1<<0)
 
+
+/* RUNTIME CONFIGURATION */
+/* Struct gets padded; warning suppressed */
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpadded"
 #elif defined(_MSC_VER)
 #pragma warning( push )
-/* Padding */
 #pragma warning( disable : 4820 )
 #endif
 typedef struct
@@ -85,8 +78,27 @@ typedef struct
 
 extern solog_config_t solog_config;
 
+/* LOG LEVELS */
+/* SOLOG_LVL_* automatically prefixed by SOLOG() macro */
+typedef enum
+{
+    SOLOG_LVL_TRACE = 0,
+    SOLOG_LVL_DEBUG,
+    SOLOG_LVL_INFO,
+    SOLOG_LVL_WARN,
+    SOLOG_LVL_ERR,
+    SOLOG_LVL_FAIL
+} solog_level_t;
+
+
+/* SOLOG MACRO */
+/* Feel free to shorten the macro itself to LOG, the rest should remain
+ * prefixed / namespaced.
+ */
 #define SOLOG( lvl, ... ) do { if ( SOLOG_LVL_##lvl >= solog_config.level ) { solog( SOLOG_LVL_##lvl, __VA_ARGS__ ); } else { (void)0; } } while ( 0 )
 
+
+/* The worker function called by the macro */
 void solog( solog_level_t level, char const * fmt, ... );
 
 #ifdef __cplusplus
@@ -96,30 +108,18 @@ void solog( solog_level_t level, char const * fmt, ... );
 #endif
 
 /* ---------------------------------------------------------------------- */
+/* End of the header part                                                 */
+/* ---------------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------------- */
+/* Begin of the implementation part; see usage at top of file / Readme.md */
+/* ---------------------------------------------------------------------- */
+
+/* COMPILE TIME CONFIGURATION, DEFAULT == ULTRALIGHT */
 #ifdef SOLOG_IMPLEMENTATION
 #if SOLOG_IMPLEMENTATION + 0 == 0
-/* No features selected; keep ultra-light */
 #undef SOLOG_IMPLEMENTATION
 #define SOLOG_IMPLEMENTATION 0
-#endif
-
-/* Features selected; provide solog_alloca() */
-#if defined(_WIN32)
-#include <malloc.h>
-#define solog_alloca(sz) _malloca(sz)
-#define solog_freea(p)    _freea(p)
-#elif defined(__GNUC__) || defined(__clang__)
-#define solog_alloca(sz) __builtin_alloca(sz)
-#define solog_freea(p)    ((void)(p))
-#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__)
-#include <stdlib.h>
-#define solog_alloca(sz) alloca(sz)
-#define solog_freea(p)    ((void)(p))
-#else
-#include <alloca.h>
-#define solog_alloca(sz) alloca(sz)
-#define solog_freea(p)    ((void)(p))
 #endif
 
 #include <stdarg.h>
@@ -129,14 +129,25 @@ void solog( solog_level_t level, char const * fmt, ... );
 extern "C" {
 #endif
 
-/* Definitions for exactly one translation unit */
-
+/* RUN TIME CONFIGURATION, INIT */
 solog_config_t solog_config = {
     NULL,
     SOLOG_LVL_INFO,
     SOLOG_IMPLEMENTATION
 };
 
+/* Suppressed warnings:
+ * -Wformat-nonliteral
+ *   We are passing the format string by variable; this is a potential
+ *   security risk if that variable is filled by user input (which it is
+ *   not, in our case).
+ * -Wunsafe-buffer-usage
+ *   A C++-based warning, triggered whenever pointer-and-index access is
+ *   being done. Which is bad style in C++, but unavoidable in C.
+ * C5045
+ *   Purely informational warning that /Qspectre would add mitigation
+ *   code. (Triggered by range-checking an index by comparison.)
+ */
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
@@ -145,12 +156,18 @@ solog_config_t solog_config = {
 #endif
 #elif defined(_MSC_VER)
 #pragma warning( push )
-/* Spectre mitigation for memory load */
 #pragma warning( disable : 5045 )
 #endif
 
+/* WORKER FUNCTION */
 void solog( solog_level_t level, char const * fmt, ... )
 {
+    /* Step 1: Calculate the max. space required to hold the header plus
+     * the user's format string ('fmt_cmpl').
+     * This depends on the features selected, plus the length of the user's
+     * format string, plus a newline.
+    */
+
 #if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LEVEL
 /* max. level length + ' | ' */
 #define SOLOG_SZ_LEVEL 8
@@ -171,16 +188,25 @@ void solog( solog_level_t level, char const * fmt, ... )
         SOLOG_SZ_LEVEL \
         + 2 )
 
+    /* Step 2: Allocate header memory */
+
     char * fmt_cmpl = (char *)solog_alloca( SOLOG_SZ_FMT + strlen( fmt ) );
     char * fptr = fmt_cmpl;
+
+    /* Step 3: Range-check the log level */
 
 #if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LEVEL
     int const lvl = ( ( level >= SOLOG_LVL_TRACE ) && ( level <= SOLOG_LVL_FAIL ) ) ? level : SOLOG_LVL_FAIL + 1;
 #else
     (void)level;
 #endif
+
+    /* Step 4: Final declarations */
+
     FILE * stream = ( solog_config.stream == NULL ) ? stderr : solog_config.stream;
     va_list ap;
+
+    /* Step 5: Assemble the header */
 
 #if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LEVEL
     if ( solog_config.features & SOLOG_FEATURE_LEVEL )
@@ -189,11 +215,18 @@ void solog( solog_level_t level, char const * fmt, ... )
     }
 #endif
 
+    /* Step 6: Append the user's format string to the header */
+
     sprintf( fptr, "%s\n", fmt );
+
+    /* Step 7: Print the log message using our header-plus-format-string. */
 
     va_start( ap, fmt );
     vfprintf( stream, fmt_cmpl, ap );
     va_end( ap );
+
+    /* Step 8: Clean up. */
+
     solog_freea( fmt_cmpl );
 }
 
