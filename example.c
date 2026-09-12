@@ -21,5 +21,16 @@ int main( void )
            "It also does not say 'Hello' as arguments are only evaluated "
            "if there is an actual message being logged.", hello() );
 
+    puts( "" );
+
+    solog_config.level = SOLOG_LVL_TRACE;
+
+    SOLOG( TRACE, "Example TRACE message" );
+    SOLOG( DEBUG, "Example Debug message" );
+    SOLOG( INFO, "Example INFO message" );
+    SOLOG( WARN, "Example WARN message" );
+    SOLOG( ERR, "Example ERR message" );
+    SOLOG( FAIL, "Example FAIL message" );
+
     return 0;
 }

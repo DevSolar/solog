@@ -47,10 +47,14 @@
  *   * SOLOG_FEATURE_FILE: Add __FILE__ to the log output.
  *   * SOLOG_FEATURE_FUNC: Add __func__ to the log output.
  *   * SOLOG_FEATURE_LINE: Add __LINE__ to the log output.
+ *   * SOLOG_FEATURE_TIME: Add timestamp to the log output.
+ *   * SOLOG_FEATURE_DATE: Add datestamp to the log output (automatically
+ *     enables timestamp)
  *   * SOLOG_FEATURE_ALL: Enable all the features above.
  *
  * HISTORY:
  *
+ *    6 -- Optional time/datestamping
  *    5 -- Optional file name, function name, line number of SOLOG() call
  *    4 -- Optional colorized output
  *    3 -- Optional use of malloc() for very long messages
@@ -59,7 +63,6 @@
  *
  * FUTURE:
  *
- * * timestamping
  * * scoping (module-local log levels)
  * * ...
  *
@@ -70,7 +73,7 @@
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOLOG_H
-#define SOLOG_H 5
+#define SOLOG_H 6
 
 #include <stdio.h>
 
@@ -100,8 +103,10 @@ typedef enum
 #define SOLOG_FEATURE_FILE (1<<3)
 #define SOLOG_FEATURE_FUNC (1<<4)
 #define SOLOG_FEATURE_LINE (1<<5)
+#define SOLOG_FEATURE_TIME (1<<6)
+#define SOLOG_FEATURE_DATE ((1<<7) | (1<<6))
 
-#define SOLOG_FEATURE_ALL ((1<<6)-1)
+#define SOLOG_FEATURE_ALL ((1<<8)-1)
 
 /* RUNTIME CONFIGURATION */
 /* Struct gets padded; warning suppressed */
@@ -212,6 +217,10 @@ solog_config_t solog_config = {
 #endif
 #endif
 
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_TIME
+#include <time.h>
+#endif
+
 typedef union
 {
     int canary;
@@ -309,6 +318,20 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
 #define SOLOG_SZ_COLOR_OFF 0
 #endif
 
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_TIME
+#define SOLOG_SZ_TIME 11
+    time_t now = time( NULL );
+    struct tm * tm = localtime( &now );
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_DATE
+#define SOLOG_SZ_DATE 11
+#else
+#define SOLOG_SZ_DATE 0
+#endif
+#else
+#define SOLOG_SZ_TIME 0
+#define SOLOG_SZ_DATE 0
+#endif
+
 #if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_LEVEL
 /* max. level length + ' | ' */
 #define SOLOG_SZ_LEVEL 8
@@ -350,11 +373,13 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
 #define SOLOG_SZ_FMT ( \
         SOLOG_SZ_COLOR_ON + \
         SOLOG_SZ_COLOR_OFF + \
+        SOLOG_SZ_DATE + \
+        SOLOG_SZ_TIME + \
         SOLOG_SZ_LEVEL + \
         SOLOG_SZ_FILE + \
         SOLOG_SZ_FUNC + \
         SOLOG_SZ_LINE + \
-        + 2 )
+        2 )
 
     /* Step 2: Allocate header memory */
 
@@ -392,6 +417,19 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
     if ( solog_config.features & SOLOG_FEATURE_COLOR )
     {
         fptr += sprintf( fptr, "%.*s", SOLOG_SZ_COLOR_ON, solog_cols_on[ lvl ] );
+    }
+#endif
+
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_TIME
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_DATE
+    if ( solog_config.features & SOLOG_FEATURE_DATE )
+    {
+        fptr += strftime( fptr, SOLOG_SZ_DATE + 1, "%F ", tm );
+    }
+#endif
+    if ( solog_config.features & SOLOG_FEATURE_TIME )
+    {
+        fptr += strftime( fptr, SOLOG_SZ_TIME + 1, "%T | ", tm );
     }
 #endif
 

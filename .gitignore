@@ -1,9 +1,10 @@
 /example
 /test/test_basic
+/test/test_color_feature
 /test/test_cpp
+/test/test_custom_alloc
 /test/test_format
 /test/test_level_feature
-/test/test_multi_tu
-/test/test_custom_alloc
-/test/test_color_feature
 /test/test_location_feature
+/test/test_multi_tu
+/test/test_time_feature

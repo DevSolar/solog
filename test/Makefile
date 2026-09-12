@@ -3,7 +3,7 @@ CXX ?= g++
 CFLAGS ?= -Wall -Wextra -Wpedantic -Werror -std=c99 -g
 CXXFLAGS ?= -Wall -Wextra -Wpedantic -Werror -std=c++11 -g
 
-TEST_BINS = test_basic test_level_feature test_color_feature test_multi_tu test_cpp test_format test_custom_alloc test_location_feature
+TEST_BINS = test_basic test_level_feature test_color_feature test_multi_tu test_cpp test_format test_custom_alloc test_location_feature test_time_feature
 
 .PHONY: all check clean
 
@@ -33,6 +33,9 @@ test_custom_alloc: test_custom_alloc.c ../solog.h
 test_location_feature: test_location_feature.c ../solog.h test_helper.h
 	$(CC) $(CFLAGS) test_location_feature.c -o $@
 
+test_time_feature: test_time_feature.c ../solog.h test_helper.h
+	$(CC) $(CFLAGS) test_time_feature.c -o $@
+
 check: $(TEST_BINS)
 	@echo "=== Running test suite ==="
 	@./test_basic
@@ -43,6 +46,7 @@ check: $(TEST_BINS)
 	@./test_format
 	@./test_custom_alloc
 	@./test_location_feature
+	@./test_time_feature
 	@echo "=== All tests passed successfully ==="
 
 clean:
