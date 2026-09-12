@@ -23,8 +23,8 @@ int main( void )
     SOLOG( FAIL,  "fail message" );
 
     /* 2. Illegal / out-of-range levels via direct solog() call */
-    solog( (solog_level_t)99, "illegal level above" );
-    solog( (solog_level_t)-1, "illegal level below" );
+    solog( (solog_level_t)99, __FILE__, __func__, __LINE__, "illegal level above" );
+    solog( (solog_level_t)-1, __FILE__, __func__, __LINE__, "illegal level below" );
 
     /* 3. Runtime disable feature */
     solog_config.features &= ~SOLOG_FEATURE_LEVEL;

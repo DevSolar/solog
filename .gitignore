@@ -6,3 +6,4 @@
 /test/test_multi_tu
 /test/test_custom_alloc
 /test/test_color_feature
+/test/test_location_feature

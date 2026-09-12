@@ -44,10 +44,14 @@
  *     Can override SOLOG_ALLOCA_MAX to set the maximum amount of memory
  *     retrieved from stack before switching to malloc (default 1kB).
  *   * SOLOG_FEATURE_COLOR: Using ANSI escape sequences to colorize logs.
+ *   * SOLOG_FEATURE_FILE: Add __FILE__ to the log output.
+ *   * SOLOG_FEATURE_FUNC: Add __func__ to the log output.
+ *   * SOLOG_FEATURE_LINE: Add __LINE__ to the log output.
  *   * SOLOG_FEATURE_ALL: Enable all the features above.
  *
  * HISTORY:
  *
+ *    5 -- Optional file name, function name, line number of SOLOG() call
  *    4 -- Optional colorized output
  *    3 -- Optional use of malloc() for very long messages
  *    2 -- Making level output optional, preparing for extension
@@ -66,7 +70,7 @@
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOLOG_H
-#define SOLOG_H 4
+#define SOLOG_H 5
 
 #include <stdio.h>
 
@@ -93,8 +97,11 @@ typedef enum
 #define SOLOG_FEATURE_LEVEL (1<<0)
 #define SOLOG_FEATURE_MALLOC (1<<1)
 #define SOLOG_FEATURE_COLOR (1<<2)
+#define SOLOG_FEATURE_FILE (1<<3)
+#define SOLOG_FEATURE_FUNC (1<<4)
+#define SOLOG_FEATURE_LINE (1<<5)
 
-#define SOLOG_FEATURE_ALL ((1<<3)-1)
+#define SOLOG_FEATURE_ALL ((1<<6)-1)
 
 /* RUNTIME CONFIGURATION */
 /* Struct gets padded; warning suppressed */
@@ -123,11 +130,10 @@ extern solog_config_t solog_config;
 /* Feel free to shorten the macro itself to LOG, the rest should remain
  * prefixed / namespaced.
  */
-#define SOLOG( lvl, ... ) do { if ( SOLOG_LVL_##lvl >= solog_config.level ) { solog( SOLOG_LVL_##lvl, __VA_ARGS__ ); } else { (void)0; } } while ( 0 )
-
+#define SOLOG( lvl, ... ) do { if ( SOLOG_LVL_##lvl >= solog_config.level ) { solog( SOLOG_LVL_##lvl, __FILE__, __func__, __LINE__, __VA_ARGS__ ); } else { (void)0; } } while ( 0 )
 
 /* The worker function called by the macro */
-void solog( solog_level_t level, char const * fmt, ... );
+void solog( solog_level_t level, char const * file, char const * func, int line, char const * fmt, ... );
 
 #ifdef __cplusplus
 }
@@ -267,7 +273,7 @@ static inline void solog_freea( void * ptr )
 #endif
 
 /* WORKER FUNCTION */
-void solog( solog_level_t level, char const * fmt, ... )
+void solog( solog_level_t level, char const * file, char const * func, int line, char const * fmt, ... )
 {
     /* Step 1: Calculate the max. space required to hold the header plus
      * the user's format string ('fmt_cmpl').
@@ -319,10 +325,35 @@ void solog( solog_level_t level, char const * fmt, ... )
 #define SOLOG_SZ_LEVEL 0
 #endif
 
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_FILE
+#ifndef SOLOG_SZ_FILE
+#define SOLOG_SZ_FILE 16
+#endif
+#else
+#define SOLOG_SZ_FILE 0
+#endif
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_FUNC
+#ifndef SOLOG_SZ_FUNC
+#define SOLOG_SZ_FUNC 16
+#endif
+#else
+#define SOLOG_SZ_FUNC 0
+#endif
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_LINE
+#ifndef SOLOG_SZ_LINE
+#define SOLOG_SZ_LINE 7
+#endif
+#else
+#define SOLOG_SZ_LINE 0
+#endif
+
 #define SOLOG_SZ_FMT ( \
         SOLOG_SZ_COLOR_ON + \
         SOLOG_SZ_COLOR_OFF + \
         SOLOG_SZ_LEVEL + \
+        SOLOG_SZ_FILE + \
+        SOLOG_SZ_FUNC + \
+        SOLOG_SZ_LINE + \
         + 2 )
 
     /* Step 2: Allocate header memory */
@@ -346,8 +377,14 @@ void solog( solog_level_t level, char const * fmt, ... )
 
     /* Step 4: Final declarations */
 
+    (void)file;
+    (void)func;
+    (void)line;
+
     FILE * stream = ( solog_config.stream == NULL ) ? stderr : solog_config.stream;
     va_list ap;
+
+    va_start( ap, fmt );
 
     /* Step 5: Assemble the header */
 
@@ -362,6 +399,27 @@ void solog( solog_level_t level, char const * fmt, ... )
     if ( solog_config.features & SOLOG_FEATURE_LEVEL )
     {
         fptr += sprintf( fptr, "%.*s | ", SOLOG_SZ_LEVEL - 3, solog_hdrs[ lvl ] );
+    }
+#endif
+
+#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_FILE
+    if ( solog_config.features & SOLOG_FEATURE_FILE )
+    {
+        fptr += sprintf( fptr, "%*.*s | ", SOLOG_SZ_FILE - 3, SOLOG_SZ_FILE - 3, file );
+    }
+#endif
+
+#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_FUNC
+    if ( solog_config.features & SOLOG_FEATURE_FUNC )
+    {
+        fptr += sprintf( fptr, "%*.*s | ", SOLOG_SZ_FUNC - 3, SOLOG_SZ_FUNC - 3, func );
+    }
+#endif
+
+#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LINE
+    if ( solog_config.features & SOLOG_FEATURE_LINE )
+    {
+        fptr += sprintf( fptr, "%*d | ", SOLOG_SZ_LINE - 3, line );
     }
 #endif
 
@@ -394,7 +452,6 @@ void solog( solog_level_t level, char const * fmt, ... )
 
     /* Step 7: Print the log message using our header-plus-format-string. */
 
-    va_start( ap, fmt );
     vfprintf( stream, fmt_cmpl, ap );
     va_end( ap );
 

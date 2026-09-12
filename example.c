@@ -1,5 +1,4 @@
-/*#define SOLOG_IMPLEMENTATION SOLOG_FEATURE_LEVEL*/
-#define SOLOG_IMPLEMENTATION
+#define SOLOG_IMPLEMENTATION SOLOG_FEATURE_ALL
 #include "solog.h"
 
 static int hello( void )
