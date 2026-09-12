@@ -54,6 +54,7 @@
  *
  * HISTORY:
  *
+ *    7 -- Bugfixes
  *    6 -- Optional time/datestamping
  *    5 -- Optional file name, function name, line number of SOLOG() call
  *    4 -- Optional colorized output
@@ -73,7 +74,7 @@
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOLOG_H
-#define SOLOG_H 6
+#define SOLOG_H 7
 
 #include <stdio.h>
 
@@ -221,6 +222,29 @@ solog_config_t solog_config = {
 #include <time.h>
 #endif
 
+/* Suppressed warnings:
+ * -Wformat-nonliteral
+ *   We are passing the format string by variable; this is a potential
+ *   security risk if that variable is filled by user input (which it is
+ *   not, in our case).
+ * -Wunsafe-buffer-usage
+ *   A C++-based warning, triggered whenever pointer-and-index access is
+ *   being done. Which is bad style in C++, but unavoidable in C.
+ * C5045
+ *   Purely informational warning that /Qspectre would add mitigation
+ *   code. (Triggered by range-checking an index by comparison.)
+ */
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
+#endif
+#elif defined(_MSC_VER)
+#pragma warning( push )
+#pragma warning( disable : 5045 )
+#endif
+
 typedef union
 {
     int canary;
@@ -258,29 +282,6 @@ static inline void solog_freea( void * ptr )
 }
 #endif
 
-/* Suppressed warnings:
- * -Wformat-nonliteral
- *   We are passing the format string by variable; this is a potential
- *   security risk if that variable is filled by user input (which it is
- *   not, in our case).
- * -Wunsafe-buffer-usage
- *   A C++-based warning, triggered whenever pointer-and-index access is
- *   being done. Which is bad style in C++, but unavoidable in C.
- * C5045
- *   Purely informational warning that /Qspectre would add mitigation
- *   code. (Triggered by range-checking an index by comparison.)
- */
-#if defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
-#if defined(__clang__)
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#endif
-#elif defined(_MSC_VER)
-#pragma warning( push )
-#pragma warning( disable : 5045 )
-#endif
-
 /* WORKER FUNCTION */
 void solog( solog_level_t level, char const * file, char const * func, int line, char const * fmt, ... )
 {
@@ -295,7 +296,7 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
 #define SOLOG_SZ_COLOR_ON 8
 #define SOLOG_SZ_COLOR_OFF 8
     static char const * const solog_cols_on[] = {
-        "\033[2m",
+        "\033[90m",
         "",
         "\033[1m",
         "\033[1;33m",
@@ -305,7 +306,7 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
     };
 
     static char const * const solog_cols_off[] = {
-        "\033[22m",
+        "\033[39m",
         "",
         "\033[22m",
         "\033[39;22m",
@@ -384,10 +385,20 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
     /* Step 2: Allocate header memory */
 
     size_t fmt_len = SOLOG_SZ_FMT + strlen( fmt );
+
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Walloca"
+#endif
+
 #if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_MALLOC
     char * fmt_cmpl = (char *)solog_malloca( ( ! ( solog_config.features & SOLOG_FEATURE_MALLOC ) && ( fmt_len > SOLOG_ALLOCA_MAX ) ) ? SOLOG_ALLOCA_MAX : fmt_len );
 #else
     char * fmt_cmpl = (char *)solog_alloca( fmt_len > SOLOG_ALLOCA_MAX ? SOLOG_ALLOCA_MAX : fmt_len );
+#endif
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
 #endif
 
     char * fptr = fmt_cmpl;
@@ -395,21 +406,21 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
     /* Step 3: Range-clamp the log level */
 
 #if ( SOLOG_IMPLEMENTATION ) & ( SOLOG_FEATURE_LEVEL | SOLOG_FEATURE_COLOR )
-    int const lvl = ( ( level >= SOLOG_LVL_TRACE ) && ( level <= SOLOG_LVL_FAIL ) ) ? level : SOLOG_LVL_FAIL + 1;
-#else
-    (void)level;
+    int const lvl = ( ( level >= SOLOG_LVL_TRACE ) && ( level <= SOLOG_LVL_FAIL ) ) ? (int)level : SOLOG_LVL_FAIL + 1;
 #endif
 
     /* Step 4: Final declarations */
-
-    (void)file;
-    (void)func;
-    (void)line;
 
     FILE * stream = ( solog_config.stream == NULL ) ? stderr : solog_config.stream;
     va_list ap;
 
     va_start( ap, fmt );
+    (void)file;
+    (void)func;
+    (void)line;
+#if ! ( ( SOLOG_IMPLEMENTATION ) & ( SOLOG_FEATURE_LEVEL | SOLOG_FEATURE_COLOR ) )
+    (void)level;
+#endif
 
     /* Step 5: Assemble the header */
 
