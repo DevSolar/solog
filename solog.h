@@ -43,10 +43,12 @@
  *     memory allocation.
  *     Can override SOLOG_ALLOCA_MAX to set the maximum amount of memory
  *     retrieved from stack before switching to malloc (default 1kB).
+ *   * SOLOG_FEATURE_COLOR: Using ANSI escape sequences to colorize logs.
  *   * SOLOG_FEATURE_ALL: Enable all the features above.
  *
  * HISTORY:
  *
+ *    4 -- Optional colorized output
  *    3 -- Optional use of malloc() for very long messages
  *    2 -- Making level output optional, preparing for extension
  *    1 -- Initial release, basic functionality
@@ -64,7 +66,7 @@
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOLOG_H
-#define SOLOG_H 3
+#define SOLOG_H 4
 
 #include <stdio.h>
 
@@ -90,9 +92,9 @@ typedef enum
 /* Display the message level in the output */
 #define SOLOG_FEATURE_LEVEL (1<<0)
 #define SOLOG_FEATURE_MALLOC (1<<1)
+#define SOLOG_FEATURE_COLOR (1<<2)
 
-#define SOLOG_FEATURE_ALL ((1<<0) | (1<<1))
-
+#define SOLOG_FEATURE_ALL ((1<<3)-1)
 
 /* RUNTIME CONFIGURATION */
 /* Struct gets padded; warning suppressed */
@@ -273,7 +275,35 @@ void solog( solog_level_t level, char const * fmt, ... )
      * format string, plus a newline.
     */
 
-#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LEVEL
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_COLOR
+/* max. length cols_on / cols_off */
+#define SOLOG_SZ_COLOR_ON 8
+#define SOLOG_SZ_COLOR_OFF 8
+    static char const * const solog_cols_on[] = {
+        "\033[2m",
+        "",
+        "\033[1m",
+        "\033[1;33m",
+        "\033[1;31m",
+        "\033[41;97m",
+        "\033[7m"
+    };
+
+    static char const * const solog_cols_off[] = {
+        "\033[22m",
+        "",
+        "\033[22m",
+        "\033[39;22m",
+        "\033[39;22m",
+        "\033[49;39m",
+        "\033[27m"
+    };
+#else
+#define SOLOG_SZ_COLOR_ON 0
+#define SOLOG_SZ_COLOR_OFF 0
+#endif
+
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_LEVEL
 /* max. level length + ' | ' */
 #define SOLOG_SZ_LEVEL 8
     static char const * const solog_hdrs[] = {
@@ -290,13 +320,15 @@ void solog( solog_level_t level, char const * fmt, ... )
 #endif
 
 #define SOLOG_SZ_FMT ( \
-        SOLOG_SZ_LEVEL \
+        SOLOG_SZ_COLOR_ON + \
+        SOLOG_SZ_COLOR_OFF + \
+        SOLOG_SZ_LEVEL + \
         + 2 )
 
     /* Step 2: Allocate header memory */
 
     size_t fmt_len = SOLOG_SZ_FMT + strlen( fmt );
-#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_MALLOC
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_MALLOC
     char * fmt_cmpl = (char *)solog_malloca( ( ! ( solog_config.features & SOLOG_FEATURE_MALLOC ) && ( fmt_len > SOLOG_ALLOCA_MAX ) ) ? SOLOG_ALLOCA_MAX : fmt_len );
 #else
     char * fmt_cmpl = (char *)solog_alloca( fmt_len > SOLOG_ALLOCA_MAX ? SOLOG_ALLOCA_MAX : fmt_len );
@@ -304,9 +336,9 @@ void solog( solog_level_t level, char const * fmt, ... )
 
     char * fptr = fmt_cmpl;
 
-    /* Step 3: Range-check the log level */
+    /* Step 3: Range-clamp the log level */
 
-#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LEVEL
+#if ( SOLOG_IMPLEMENTATION ) & ( SOLOG_FEATURE_LEVEL | SOLOG_FEATURE_COLOR )
     int const lvl = ( ( level >= SOLOG_LVL_TRACE ) && ( level <= SOLOG_LVL_FAIL ) ) ? level : SOLOG_LVL_FAIL + 1;
 #else
     (void)level;
@@ -319,6 +351,13 @@ void solog( solog_level_t level, char const * fmt, ... )
 
     /* Step 5: Assemble the header */
 
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_COLOR
+    if ( solog_config.features & SOLOG_FEATURE_COLOR )
+    {
+        fptr += sprintf( fptr, "%.*s", SOLOG_SZ_COLOR_ON, solog_cols_on[ lvl ] );
+    }
+#endif
+
 #if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_LEVEL
     if ( solog_config.features & SOLOG_FEATURE_LEVEL )
     {
@@ -328,18 +367,30 @@ void solog( solog_level_t level, char const * fmt, ... )
 
     /* Step 6: Append the user's format string to the header */
 
-#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_MALLOC
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_MALLOC
     if ( solog_config.features & SOLOG_FEATURE_MALLOC )
     {
-        sprintf( fptr, "%s\n", fmt );
+        fptr += sprintf( fptr, "%s", fmt );
     }
     else
     {
-        sprintf( fptr, "%.*s\n", SOLOG_ALLOCA_MAX - (int)( ( fptr + 2 ) - fmt_cmpl ), fmt );
+        fptr += sprintf( fptr, "%.*s", SOLOG_ALLOCA_MAX - (int)( ( fptr + SOLOG_SZ_COLOR_OFF + 2 ) - fmt_cmpl ), fmt );
     }
 #else
-    sprintf( fptr, "%.*s\n", SOLOG_ALLOCA_MAX - (int)( ( fptr + 2 ) - fmt_cmpl ), fmt );
+    fptr += sprintf( fptr, "%.*s", SOLOG_ALLOCA_MAX - (int)( ( fptr + SOLOG_SZ_COLOR_OFF + 2 ) - fmt_cmpl ), fmt );
 #endif
+
+    /* Step 6a: Append color-off sequence if required */
+
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_COLOR
+    if ( solog_config.features & SOLOG_FEATURE_COLOR )
+    {
+        fptr += sprintf( fptr, "%.*s", SOLOG_SZ_COLOR_OFF, solog_cols_off[ lvl ] );
+    }
+#endif
+
+    *fptr++ = '\n';
+    *fptr = '\0';
 
     /* Step 7: Print the log message using our header-plus-format-string. */
 
@@ -349,7 +400,7 @@ void solog( solog_level_t level, char const * fmt, ... )
 
     /* Step 8: Clean up. */
 
-#if SOLOG_IMPLEMENTATION & SOLOG_FEATURE_MALLOC
+#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_MALLOC
     solog_freea( fmt_cmpl );
 #endif
 }
