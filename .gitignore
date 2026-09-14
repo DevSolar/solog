@@ -1,4 +1,5 @@
 /example
+/output
 /test/test_basic
 /test/test_color_feature
 /test/test_cpp

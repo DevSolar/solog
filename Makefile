@@ -1,16 +1,19 @@
 CC ?= gcc
 CFLAGS ?= -Wall -Wextra -Wpedantic -Werror -std=c99 -g
 
-.PHONY: all example check clean
+.PHONY: all example output check clean
 
-all: example
+all: example output
 
 example: example.c solog.h
 	$(CC) $(CFLAGS) example.c -o $@
+
+output: output.c solog.h
+	$(CC) $(CFLAGS) output.c -o $@
 
 check:
 	$(MAKE) -C test check
 
 clean:
-	rm -f example
+	rm -f example output
 	$(MAKE) -C test clean

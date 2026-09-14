@@ -56,17 +56,10 @@ to a bit mask. OR-ing them together, you can compile-time enable some, all,
 or none of them. By AND-ing them out of solog_config.features, you can run-
 time toggle them.
 
-Basic output:
+This is the result of running `./output`:
 
-```
-Application started with SoLog v2
-```
+![Screenshot](/screenshot.png?raw=true)
 
-With SOLOG_FEATURE_LEVEL:
-
-```
- INFO | Application started with SoLog v2
-```
 
 ## License
 
