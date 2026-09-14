@@ -38,8 +38,7 @@
  *   * SOLOG_FEATURE_LEVEL: Show the level of the message in the output.
  *   * SOLOG_FEATURE_MALLOC: Use malloc() for long messages (default is
  *     to truncate the format string after SOLOG_ALLOCA_MAX characters).
- *     Can override macros solog_malloc and solog_free (on Unix-alike OS)
- *     or solog_malloca and solog_freea (on Windows) to define custom
+ *     Can override macros solog_malloc and solog_free to define custom
  *     memory allocation.
  *     Can override SOLOG_ALLOCA_MAX to set the maximum amount of memory
  *     retrieved from stack before switching to malloc (default 1kB).
@@ -54,6 +53,8 @@
  *
  * HISTORY:
  *
+ *   10 -- Dropped Windows-specific _malloca() usage in favor of unified
+ *         implementation of dynamic memory allocation
  *    9 -- Fixed issues with Windows compilation, added greatest.h
  *    8 -- Fixed issue #1, DATE / TIME logic inversed
  *    7 -- Bugfixes
@@ -76,7 +77,7 @@
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOLOG_H
-#define SOLOG_H 9
+#define SOLOG_H 10
 
 #include <stdio.h>
 
@@ -148,24 +149,6 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
 #endif
 
 /* MEMORY ALLOCATION */
-#ifdef _WIN32
-/* Windows provides _malloca(), which falls back to malloc() if the requested
- * size is too large for alloca().
- */
-#undef _ALLOCA_S_THRESHOLD
-#define _ALLOCA_S_THRESHOLD SOLOG_ALLOCA_MAX
-#include <malloc.h>
-#ifndef solog_alloca
-#define solog_alloca( sz ) _alloca( sz )
-#endif
-#ifndef solog_malloca
-#define solog_malloca( sz ) _malloca( sz )
-#endif
-#ifndef solog_freea
-#define solog_freea( ptr ) _freea( ptr )
-#endif
-#else
-/* For other platforms, we implement our own version of _malloca(). */
 /* solog_alloca(), solog_malloc(), solog_free() */
 #include <stdlib.h>
 #ifndef solog_malloc
@@ -177,6 +160,9 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
 #ifndef solog_alloca
 #if defined( __GNUC__ ) || defined( __clang__ )
 #define solog_alloca( sz ) __builtin_alloca( sz )
+#elif defined( _WIN32 ) || defined( _MSC_VER )
+#include <malloc.h>
+#define solog_alloca( sz ) _alloca( sz )
 #elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__)
 #define solog_alloca( sz ) alloca( sz )
 #else
@@ -220,7 +206,6 @@ static inline void solog_freea( void * ptr )
         }
     }
 }
-#endif
 
 #ifdef __cplusplus
 }
