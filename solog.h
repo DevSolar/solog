@@ -54,6 +54,7 @@
  *
  * HISTORY:
  *
+ *    8 -- Fixed issue #1, DATE / TIME logic inversed
  *    7 -- Bugfixes
  *    6 -- Optional time/datestamping
  *    5 -- Optional file name, function name, line number of SOLOG() call
@@ -74,7 +75,7 @@
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOLOG_H
-#define SOLOG_H 7
+#define SOLOG_H 8
 
 #include <stdio.h>
 
@@ -105,7 +106,7 @@ typedef enum
 #define SOLOG_FEATURE_FUNC (1<<4)
 #define SOLOG_FEATURE_LINE (1<<5)
 #define SOLOG_FEATURE_TIME (1<<6)
-#define SOLOG_FEATURE_DATE ((1<<7) | (1<<6))
+#define SOLOG_FEATURE_DATE (1<<7)
 
 #define SOLOG_FEATURE_ALL ((1<<8)-1)
 
@@ -218,7 +219,7 @@ solog_config_t solog_config = {
 #endif
 #endif
 
-#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_TIME
+#if ( SOLOG_IMPLEMENTATION ) & ( SOLOG_FEATURE_TIME | SOLOG_FEATURE_DATE )
 #include <time.h>
 #endif
 
@@ -319,7 +320,7 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
 #define SOLOG_SZ_COLOR_OFF 0
 #endif
 
-#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_TIME
+#if ( SOLOG_IMPLEMENTATION ) & ( SOLOG_FEATURE_TIME | SOLOG_FEATURE_DATE )
 #define SOLOG_SZ_TIME 11
     time_t now = time( NULL );
     struct tm * tm = localtime( &now );
@@ -431,14 +432,14 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
     }
 #endif
 
-#if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_TIME
+#if ( SOLOG_IMPLEMENTATION ) & ( SOLOG_FEATURE_TIME | SOLOG_FEATURE_DATE )
 #if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_DATE
     if ( solog_config.features & SOLOG_FEATURE_DATE )
     {
         fptr += strftime( fptr, SOLOG_SZ_DATE + 1, "%F ", tm );
     }
 #endif
-    if ( solog_config.features & SOLOG_FEATURE_TIME )
+    if ( solog_config.features & ( SOLOG_FEATURE_TIME | SOLOG_FEATURE_DATE ) )
     {
         fptr += strftime( fptr, SOLOG_SZ_TIME + 1, "%T | ", tm );
     }

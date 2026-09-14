@@ -33,7 +33,7 @@ int main( void )
     fclose( f );
 
     char const * const expected =
-        "\033[2mTRACE | trace message\033[22m\n"
+        "\033[90mTRACE | trace message\033[39m\n"
         "DEBUG | debug message\n"
         "\033[1m INFO | info message\033[22m\n"
         "\033[1;33m WARN | warn message\033[39;22m\n"

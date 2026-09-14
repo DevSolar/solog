@@ -52,8 +52,8 @@ int main( void )
     SOLOG( INFO, "Timestamped logging, without..." );
 
     /* SOLOG_FEATURE_DATE */
-    printf( "\nWith SOLOG_FEATURE_DATE:\n\n    " );
-    solog_config.features = ( SOLOG_FEATURE_LEVEL | SOLOG_FEATURE_DATE | SOLOG_FEATURE_TIME );
+    printf( "\nWith SOLOG_FEATURE_DATE (implies TIME as well):\n\n    " );
+    solog_config.features = ( SOLOG_FEATURE_LEVEL | SOLOG_FEATURE_DATE );
     SOLOG( INFO, "...and with date." );
 
     /* SOLOG_FEATURE_ALL */
