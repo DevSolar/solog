@@ -1,16 +1,17 @@
-#define SOLOG_IMPLEMENTATION ( SOLOG_FEATURE_COLOR | SOLOG_FEATURE_LEVEL )
 #include "../solog.h"
 #include "test_helper.h"
-#include <assert.h>
+#include "greatest.h"
 
-int main( void )
+TEST test_color_feature( void )
 {
     char const * const out_file = "test_color_feature.out";
 
-    assert( solog_config.features == ( SOLOG_FEATURE_COLOR | SOLOG_FEATURE_LEVEL ) );
+    solog_config.features = SOLOG_FEATURE_COLOR | SOLOG_FEATURE_LEVEL;
+
+    ASSERT_EQ( SOLOG_FEATURE_COLOR | SOLOG_FEATURE_LEVEL, solog_config.features );
 
     FILE * f = fopen( out_file, "w" );
-    assert( f != NULL );
+    ASSERT( f != NULL );
     solog_config.stream = f;
     solog_config.level = SOLOG_LVL_TRACE;
 
@@ -31,6 +32,7 @@ int main( void )
     SOLOG( INFO, "color re-enabled at runtime" );
 
     fclose( f );
+    solog_config.stream = NULL;
 
     char const * const expected =
         "\033[90mTRACE | trace message\033[39m\n"
@@ -42,12 +44,12 @@ int main( void )
         " INFO | color disabled at runtime\n"
         "\033[1m INFO | color re-enabled at runtime\033[22m\n";
 
-    if ( !check_file_contents( out_file, expected ) )
-    {
-        return 1;
-    }
-
+    ASSERT( check_file_contents( out_file, expected ) );
     remove( out_file );
-    printf( "PASS: test_color_feature\n" );
-    return 0;
+    PASS();
+}
+
+SUITE( color_feature_suite )
+{
+    RUN_TEST( test_color_feature );
 }

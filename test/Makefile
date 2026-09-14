@@ -2,52 +2,54 @@ CC ?= gcc
 CXX ?= g++
 CFLAGS ?= -Wall -Wextra -Wpedantic -Werror -std=c99 -g
 CXXFLAGS ?= -Wall -Wextra -Wpedantic -Werror -std=c++11 -g
+LDFLAGS ?=
 
-TEST_BINS = test_basic test_level_feature test_color_feature test_multi_tu test_cpp test_format test_custom_alloc test_location_feature test_time_feature
+EXEEXT ?=
+ifeq ($(OS),Windows_NT)
+    EXEEXT := .exe
+else ifneq ($(findstring mingw,$(CC)$(CXX)),)
+    EXEEXT := .exe
+else ifneq ($(findstring w64,$(CC)$(CXX)),)
+    EXEEXT := .exe
+else ifneq ($(findstring win32,$(CC)$(CXX)),)
+    EXEEXT := .exe
+endif
+
+ifneq ($(EXEEXT),)
+    LDFLAGS += -static-libgcc -static-libstdc++
+endif
+
+OBJS = test_main.o \
+       test_basic.o \
+       test_level_feature.o \
+       test_color_feature.o \
+       test_multi_tu_main.o \
+       test_multi_tu_sub.o \
+       test_cpp.o \
+       test_format.o \
+       test_custom_alloc.o \
+       test_location_feature.o \
+       test_time_feature.o
+
+TARGET_BASE = test_runner
+TARGET = $(TARGET_BASE)$(EXEEXT)
 
 .PHONY: all check clean
 
-all: $(TEST_BINS)
+all: $(TARGET)
 
-test_basic: test_basic.c ../solog.h test_helper.h
-	$(CC) $(CFLAGS) test_basic.c -o $@
+$(TARGET): $(OBJS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(OBJS) -o $@
 
-test_level_feature: test_level_feature.c ../solog.h test_helper.h
-	$(CC) $(CFLAGS) test_level_feature.c -o $@
+%.o: %.c ../solog.h test_helper.h greatest.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
-test_color_feature: test_color_feature.c ../solog.h test_helper.h
-	$(CC) $(CFLAGS) test_color_feature.c -o $@
+test_cpp.o: test_cpp.cpp ../solog.h test_helper.h greatest.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-test_multi_tu: test_multi_tu_main.c test_multi_tu_sub.c ../solog.h test_multi_tu_sub.h test_helper.h
-	$(CC) $(CFLAGS) test_multi_tu_main.c test_multi_tu_sub.c -o $@
-
-test_cpp: test_cpp.cpp ../solog.h test_helper.h
-	$(CXX) $(CXXFLAGS) test_cpp.cpp -o $@
-
-test_format: test_format.c ../solog.h test_helper.h
-	$(CC) $(CFLAGS) test_format.c -o $@
-
-test_custom_alloc: test_custom_alloc.c ../solog.h
-	$(CC) $(CFLAGS) test_custom_alloc.c -o $@
-
-test_location_feature: test_location_feature.c ../solog.h test_helper.h
-	$(CC) $(CFLAGS) test_location_feature.c -o $@
-
-test_time_feature: test_time_feature.c ../solog.h test_helper.h
-	$(CC) $(CFLAGS) test_time_feature.c -o $@
-
-check: $(TEST_BINS)
-	@echo "=== Running test suite ==="
-	@./test_basic
-	@./test_level_feature
-	@./test_color_feature
-	@./test_multi_tu
-	@./test_cpp
-	@./test_format
-	@./test_custom_alloc
-	@./test_location_feature
-	@./test_time_feature
-	@echo "=== All tests passed successfully ==="
+check: $(TARGET)
+	@echo "=== Running unified test runner ==="
+	@./$(TARGET)
 
 clean:
-	rm -f $(TEST_BINS) *.out *.o
+	rm -f $(TARGET_BASE) $(TARGET_BASE).exe $(TARGET) *.o *.out

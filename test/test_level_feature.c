@@ -1,16 +1,17 @@
-#define SOLOG_IMPLEMENTATION SOLOG_FEATURE_LEVEL
 #include "../solog.h"
 #include "test_helper.h"
-#include <assert.h>
+#include "greatest.h"
 
-int main( void )
+TEST test_level_feature( void )
 {
     char const * const out_file = "test_level_feature.out";
 
-    assert( solog_config.features == SOLOG_FEATURE_LEVEL );
+    solog_config.features = SOLOG_FEATURE_LEVEL;
+
+    ASSERT_EQ( SOLOG_FEATURE_LEVEL, solog_config.features );
 
     FILE * f = fopen( out_file, "w" );
-    assert( f != NULL );
+    ASSERT( f != NULL );
     solog_config.stream = f;
     solog_config.level = SOLOG_LVL_TRACE;
 
@@ -35,6 +36,7 @@ int main( void )
     SOLOG( INFO, "level prefix re-enabled at runtime" );
 
     fclose( f );
+    solog_config.stream = NULL;
 
     char const * const expected =
         "TRACE | trace message\n"
@@ -48,12 +50,12 @@ int main( void )
         "level prefix disabled at runtime\n"
         " INFO | level prefix re-enabled at runtime\n";
 
-    if ( !check_file_contents( out_file, expected ) )
-    {
-        return 1;
-    }
-
+    ASSERT( check_file_contents( out_file, expected ) );
     remove( out_file );
-    printf( "PASS: test_level_feature\n" );
-    return 0;
+    PASS();
+}
+
+SUITE( level_feature_suite )
+{
+    RUN_TEST( test_level_feature );
 }

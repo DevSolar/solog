@@ -15,5 +15,5 @@ check:
 	$(MAKE) -C test check
 
 clean:
-	rm -f example output
+	rm -f example output example.exe output.exe
 	$(MAKE) -C test clean

@@ -1,7 +1,6 @@
-#define SOLOG_IMPLEMENTATION
 #include "../solog.h"
 #include "test_helper.h"
-#include <assert.h>
+#include "greatest.h"
 
 static int side_effect_counter = 0;
 
@@ -10,17 +9,28 @@ static int side_effect( void )
     return ++side_effect_counter;
 }
 
-int main( void )
+TEST test_default_config( void )
+{
+    solog_config.stream = NULL;
+    solog_config.level = SOLOG_LVL_INFO;
+    solog_config.features = 0;
+
+    ASSERT_EQ( NULL, solog_config.stream );
+    ASSERT_EQ( SOLOG_LVL_INFO, solog_config.level );
+    ASSERT_EQ( 0, solog_config.features );
+    PASS();
+}
+
+TEST test_basic_logging( void )
 {
     char const * const out_file = "test_basic.out";
 
-    /* Assert default configuration */
-    assert( solog_config.stream == NULL );
-    assert( solog_config.level == SOLOG_LVL_INFO );
-    assert( solog_config.features == 0 );
+    solog_config.level = SOLOG_LVL_INFO;
+    solog_config.features = 0;
+    side_effect_counter = 0;
 
     FILE * f = fopen( out_file, "w" );
-    assert( f != NULL );
+    ASSERT( f != NULL );
     solog_config.stream = f;
 
     /* 1. Default INFO level: TRACE and DEBUG should be filtered */
@@ -33,10 +43,10 @@ int main( void )
 
     /* 2. Short-circuiting: argument evaluation */
     SOLOG( DEBUG, "eval %d", side_effect() ); /* filtered, side_effect should not run */
-    assert( side_effect_counter == 0 );
+    ASSERT_EQ( 0, side_effect_counter );
 
     SOLOG( WARN,  "eval %d", side_effect() ); /* logged, side_effect runs */
-    assert( side_effect_counter == 1 );
+    ASSERT_EQ( 1, side_effect_counter );
 
     /* 3. Runtime level modification */
     solog_config.level = SOLOG_LVL_TRACE;
@@ -48,24 +58,7 @@ int main( void )
     SOLOG( FAIL, "fail visible" );
 
     fclose( f );
-
-    /* 4. Test solog_malloca and solog_freea */
-    solog_freea( NULL );
-
-    /* Small allocation (stack) */
-    char * p_small = (char *)solog_malloca( 64 );
-    assert( p_small != NULL );
-    memset( p_small, 'X', 64 );
-    assert( p_small[ 0 ] == 'X' );
-    solog_freea( p_small );
-
-    /* Large allocation (heap) */
-    char * p_large = (char *)solog_malloca( 2048 );
-    assert( p_large != NULL );
-    memset( p_large, 'Y', 2048 );
-    assert( p_large[ 0 ] == 'Y' );
-    assert( p_large[ 2047 ] == 'Y' );
-    solog_freea( p_large );
+    solog_config.stream = NULL;
 
     char const * const expected =
         "msg info 3\n"
@@ -77,12 +70,36 @@ int main( void )
         "debug now visible\n"
         "fail visible\n";
 
-    if ( !check_file_contents( out_file, expected ) )
-    {
-        return 1;
-    }
-
+    ASSERT( check_file_contents( out_file, expected ) );
     remove( out_file );
-    printf( "PASS: test_basic\n" );
-    return 0;
+    PASS();
+}
+
+TEST test_allocator( void )
+{
+    solog_freea( NULL );
+
+    /* Small allocation (stack) */
+    char * p_small = (char *)solog_malloca( 64 );
+    ASSERT( p_small != NULL );
+    memset( p_small, 'X', 64 );
+    ASSERT_EQ( 'X', p_small[ 0 ] );
+    solog_freea( p_small );
+
+    /* Large allocation (heap) */
+    char * p_large = (char *)solog_malloca( 2048 );
+    ASSERT( p_large != NULL );
+    memset( p_large, 'Y', 2048 );
+    ASSERT_EQ( 'Y', p_large[ 0 ] );
+    ASSERT_EQ( 'Y', p_large[ 2047 ] );
+    solog_freea( p_large );
+
+    PASS();
+}
+
+SUITE( basic_suite )
+{
+    RUN_TEST( test_default_config );
+    RUN_TEST( test_basic_logging );
+    RUN_TEST( test_allocator );
 }

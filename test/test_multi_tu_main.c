@@ -1,15 +1,17 @@
-#define SOLOG_IMPLEMENTATION SOLOG_FEATURE_LEVEL
 #include "../solog.h"
 #include "test_multi_tu_sub.h"
 #include "test_helper.h"
-#include <assert.h>
+#include "greatest.h"
 
-int main( void )
+TEST test_multi_tu( void )
 {
     char const * const out_file = "test_multi_tu.out";
 
+    solog_config.level = SOLOG_LVL_INFO;
+    solog_config.features = SOLOG_FEATURE_LEVEL;
+
     FILE * f = fopen( out_file, "w" );
-    assert( f != NULL );
+    ASSERT( f != NULL );
     solog_config.stream = f;
 
     SOLOG( INFO, "main unit start" );
@@ -21,6 +23,7 @@ int main( void )
     SOLOG( INFO, "main unit end" );
 
     fclose( f );
+    solog_config.stream = NULL;
 
     char const * const expected =
         " INFO | main unit start\n"
@@ -29,12 +32,12 @@ int main( void )
         "DEBUG | debug from sub unit\n"
         " INFO | main unit end\n";
 
-    if ( !check_file_contents( out_file, expected ) )
-    {
-        return 1;
-    }
-
+    ASSERT( check_file_contents( out_file, expected ) );
     remove( out_file );
-    printf( "PASS: test_multi_tu\n" );
-    return 0;
+    PASS();
+}
+
+SUITE( multi_tu_suite )
+{
+    RUN_TEST( test_multi_tu );
 }

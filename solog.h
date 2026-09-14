@@ -54,6 +54,7 @@
  *
  * HISTORY:
  *
+ *    9 -- Fixed issues with Windows compilation, added greatest.h
  *    8 -- Fixed issue #1, DATE / TIME logic inversed
  *    7 -- Bugfixes
  *    6 -- Optional time/datestamping
@@ -75,7 +76,7 @@
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOLOG_H
-#define SOLOG_H 8
+#define SOLOG_H 9
 
 #include <stdio.h>
 
@@ -142,41 +143,6 @@ extern solog_config_t solog_config;
 /* The worker function called by the macro */
 void solog( solog_level_t level, char const * file, char const * func, int line, char const * fmt, ... );
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif
-
-/* ---------------------------------------------------------------------- */
-/* End of the header part                                                 */
-/* ---------------------------------------------------------------------- */
-
-/* ---------------------------------------------------------------------- */
-/* Begin of the implementation part; see usage at top of file / Readme.md */
-/* ---------------------------------------------------------------------- */
-
-/* COMPILE TIME CONFIGURATION, DEFAULT == ULTRALIGHT */
-#ifdef SOLOG_IMPLEMENTATION
-#if SOLOG_IMPLEMENTATION + 0 == 0
-#undef SOLOG_IMPLEMENTATION
-#define SOLOG_IMPLEMENTATION 0
-#endif
-
-#include <stdarg.h>
-#include <string.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/* RUN TIME CONFIGURATION, INIT */
-solog_config_t solog_config = {
-    NULL,
-    SOLOG_LVL_INFO,
-    SOLOG_IMPLEMENTATION
-};
-
 #ifndef SOLOG_ALLOCA_MAX
 #define SOLOG_ALLOCA_MAX 1024
 #endif
@@ -219,33 +185,6 @@ solog_config_t solog_config = {
 #endif
 #endif
 
-#if ( SOLOG_IMPLEMENTATION ) & ( SOLOG_FEATURE_TIME | SOLOG_FEATURE_DATE )
-#include <time.h>
-#endif
-
-/* Suppressed warnings:
- * -Wformat-nonliteral
- *   We are passing the format string by variable; this is a potential
- *   security risk if that variable is filled by user input (which it is
- *   not, in our case).
- * -Wunsafe-buffer-usage
- *   A C++-based warning, triggered whenever pointer-and-index access is
- *   being done. Which is bad style in C++, but unavoidable in C.
- * C5045
- *   Purely informational warning that /Qspectre would add mitigation
- *   code. (Triggered by range-checking an index by comparison.)
- */
-#if defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
-#if defined(__clang__)
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#endif
-#elif defined(_MSC_VER)
-#pragma warning( push )
-#pragma warning( disable : 5045 )
-#endif
-
 typedef union
 {
     int canary;
@@ -281,6 +220,67 @@ static inline void solog_freea( void * ptr )
         }
     }
 }
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+
+/* ---------------------------------------------------------------------- */
+/* End of the header part                                                 */
+/* ---------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------- */
+/* Begin of the implementation part; see usage at top of file / Readme.md */
+/* ---------------------------------------------------------------------- */
+
+/* COMPILE TIME CONFIGURATION, DEFAULT == ULTRALIGHT */
+#ifdef SOLOG_IMPLEMENTATION
+#if SOLOG_IMPLEMENTATION + 0 == 0
+#undef SOLOG_IMPLEMENTATION
+#define SOLOG_IMPLEMENTATION 0
+#endif
+
+#include <stdarg.h>
+#include <string.h>
+#if ( SOLOG_IMPLEMENTATION ) & ( SOLOG_FEATURE_TIME | SOLOG_FEATURE_DATE )
+#include <time.h>
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* RUN TIME CONFIGURATION, INIT */
+solog_config_t solog_config = {
+    NULL,
+    SOLOG_LVL_INFO,
+    SOLOG_IMPLEMENTATION
+};
+
+/* Suppressed warnings:
+ * -Wformat-nonliteral
+ *   We are passing the format string by variable; this is a potential
+ *   security risk if that variable is filled by user input (which it is
+ *   not, in our case).
+ * -Wunsafe-buffer-usage
+ *   A C++-based warning, triggered whenever pointer-and-index access is
+ *   being done. Which is bad style in C++, but unavoidable in C.
+ * C5045
+ *   Purely informational warning that /Qspectre would add mitigation
+ *   code. (Triggered by range-checking an index by comparison.)
+ */
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
+#endif
+#elif defined(_MSC_VER)
+#pragma warning( push )
+#pragma warning( disable : 5045 )
 #endif
 
 /* WORKER FUNCTION */
@@ -436,12 +436,12 @@ void solog( solog_level_t level, char const * file, char const * func, int line,
 #if ( SOLOG_IMPLEMENTATION ) & SOLOG_FEATURE_DATE
     if ( solog_config.features & SOLOG_FEATURE_DATE )
     {
-        fptr += strftime( fptr, SOLOG_SZ_DATE + 1, "%F ", tm );
+        fptr += strftime( fptr, SOLOG_SZ_DATE + 1, "%Y-%m-%d ", tm );
     }
 #endif
     if ( solog_config.features & ( SOLOG_FEATURE_TIME | SOLOG_FEATURE_DATE ) )
     {
-        fptr += strftime( fptr, SOLOG_SZ_TIME + 1, "%T | ", tm );
+        fptr += strftime( fptr, SOLOG_SZ_TIME + 1, "%H:%M:%S | ", tm );
     }
 #endif
 

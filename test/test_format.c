@@ -1,14 +1,16 @@
-#define SOLOG_IMPLEMENTATION SOLOG_FEATURE_LEVEL
 #include "../solog.h"
 #include "test_helper.h"
-#include <assert.h>
+#include "greatest.h"
 
-int main( void )
+TEST test_format( void )
 {
     char const * const out_file = "test_format.out";
 
+    solog_config.level = SOLOG_LVL_INFO;
+    solog_config.features = SOLOG_FEATURE_LEVEL;
+
     FILE * f = fopen( out_file, "w" );
-    assert( f != NULL );
+    ASSERT( f != NULL );
     solog_config.stream = f;
 
     /* 1. Empty string format */
@@ -24,11 +26,12 @@ int main( void )
     SOLOG( INFO, "LONG: %s", long_str );
 
     fclose( f );
+    solog_config.stream = NULL;
 
     /* Build expected content */
     size_t const expected_sz = 8 + 1 + 8 + 48 + 8 + 6 + 1500 + 10;
     char * expected = (char *)malloc( expected_sz );
-    assert( expected != NULL );
+    ASSERT( expected != NULL );
 
     snprintf( expected, expected_sz,
               " INFO | \n"
@@ -36,14 +39,15 @@ int main( void )
               " INFO | LONG: %s\n",
               long_str );
 
-    if ( !check_file_contents( out_file, expected ) )
-    {
-        free( expected );
-        return 1;
-    }
-
+    int const res = check_file_contents( out_file, expected );
     free( expected );
+    ASSERT( res );
+
     remove( out_file );
-    printf( "PASS: test_format\n" );
-    return 0;
+    PASS();
+}
+
+SUITE( format_suite )
+{
+    RUN_TEST( test_format );
 }

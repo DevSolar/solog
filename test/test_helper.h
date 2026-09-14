@@ -5,6 +5,22 @@
 #include <stdlib.h>
 #include <string.h>
 
+static inline void normalize_crlf( char * str )
+{
+    if ( !str ) return;
+    char * src = str;
+    char * dst = str;
+    while ( *src != '\0' )
+    {
+        if ( *src != '\r' )
+        {
+            *dst++ = *src;
+        }
+        src++;
+    }
+    *dst = '\0';
+}
+
 static inline int check_file_contents( const char * filename, const char * expected )
 {
     FILE * f = fopen( filename, "rb" );
@@ -41,17 +57,27 @@ static inline int check_file_contents( const char * filename, const char * expec
     buf[ read_bytes ] = '\0';
     fclose( f );
 
-    if ( strcmp( buf, expected ) != 0 )
+    normalize_crlf( buf );
+
+    char * expected_norm = (char *)malloc( strlen( expected ) + 1 );
+    if ( expected_norm )
+    {
+        strcpy( expected_norm, expected );
+        normalize_crlf( expected_norm );
+    }
+    char const * const exp = expected_norm ? expected_norm : expected;
+
+    int const match = ( strcmp( buf, exp ) == 0 );
+    if ( !match )
     {
         fprintf( stderr, "FAIL: Output mismatch in '%s'\n", filename );
-        fprintf( stderr, "=== Expected ===\n%s\n", expected );
+        fprintf( stderr, "=== Expected ===\n%s\n", exp );
         fprintf( stderr, "=== Actual ===\n%s\n", buf );
-        free( buf );
-        return 0;
     }
 
+    free( expected_norm );
     free( buf );
-    return 1;
+    return match;
 }
 
 #endif
